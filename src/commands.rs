@@ -1,7 +1,7 @@
 use crate::assistant::Assistant;
 use crate::cli::{
-    AddCommand, AssistantArgs, ListCommand, MarkUsedCommand, RemoveCommand, ShowCommand,
-    StatsCommand,
+    AddCommand, AssistantArgs, ListCommand, MarkUsedCommand, RemoveCommand, SearchCommand,
+    ShowCommand, StatsCommand,
 };
 use crate::config::Config;
 use crate::paths::{ensure_dir, AppPaths};
@@ -160,6 +160,65 @@ pub fn cmd_show(cmd: &ShowCommand, config: &Config, paths: &AppPaths) -> Result<
 
     if !found {
         return Err(anyhow!("skill not found"));
+    }
+
+    Ok(())
+}
+
+pub fn cmd_search(cmd: &SearchCommand, config: &Config, paths: &AppPaths) -> Result<()> {
+    let assistants = resolve_list_assistants(&cmd.assistant, config);
+    let query = cmd.query.to_ascii_lowercase();
+    let mut matches = Vec::new();
+
+    for assistant in &assistants {
+        let root = config.skills_root_for(paths, *assistant);
+        if !root.exists() {
+            continue;
+        }
+
+        for entry in
+            fs::read_dir(&root).with_context(|| format!("failed to read {}", root.display()))?
+        {
+            let entry = entry?;
+            if !entry.file_type()?.is_dir() {
+                continue;
+            }
+            let skill_dir = entry.path();
+            let skill_md = skill_dir.join("SKILL.md");
+            if !skill_md.exists() {
+                continue;
+            }
+
+            let contents = fs::read_to_string(&skill_md)
+                .with_context(|| format!("failed to read {}", skill_md.display()))?;
+            let frontmatter = validation::read_frontmatter(&skill_dir)?;
+            let haystack = format!(
+                "{}\n{}\n{}",
+                frontmatter.name, frontmatter.description, contents
+            )
+            .to_ascii_lowercase();
+
+            if haystack.contains(&query) {
+                matches.push((
+                    assistant,
+                    frontmatter.name,
+                    frontmatter.description,
+                    skill_dir,
+                ));
+            }
+        }
+    }
+
+    if matches.is_empty() {
+        println!("No matches found");
+        return Ok(());
+    }
+
+    for (assistant, name, description, path) in matches {
+        println!("{assistant}: {name}");
+        println!("Description: {description}");
+        println!("Path: {}", path.display());
+        println!();
     }
 
     Ok(())

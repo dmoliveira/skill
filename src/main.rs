@@ -61,7 +61,7 @@ fn main() -> Result<()> {
         Command::List(cmd) => commands::cmd_list(&cmd, &config, &paths),
         Command::Show(cmd) => commands::cmd_show(&cmd, &config, &paths),
         Command::Stats(cmd) => commands::cmd_stats(&cmd, &config, &paths),
-        Command::Search(_) => Err(anyhow!("search is not implemented yet")),
+        Command::Search(cmd) => commands::cmd_search(&cmd, &config, &paths),
         Command::Scan(cmd) => {
             let report = scan::scan_path(Path::new(&cmd.path))?;
             if report.issues.is_empty() && report.external.is_empty() {
