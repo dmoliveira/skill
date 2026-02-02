@@ -47,14 +47,14 @@ impl ValidationReport {
 }
 
 #[derive(Debug, Deserialize)]
-struct SkillFrontmatter {
-    name: String,
-    description: String,
-    license: Option<String>,
-    compatibility: Option<String>,
-    metadata: Option<BTreeMap<String, String>>,
+pub struct SkillFrontmatter {
+    pub name: String,
+    pub description: String,
+    pub license: Option<String>,
+    pub compatibility: Option<String>,
+    pub metadata: Option<BTreeMap<String, String>>,
     #[serde(rename = "allowed-tools")]
-    allowed_tools: Option<String>,
+    pub allowed_tools: Option<String>,
 }
 
 pub fn validate_skill_dir(path: &Path) -> Result<ValidationReport> {
@@ -83,15 +83,12 @@ pub fn validate_skill_dir(path: &Path) -> Result<ValidationReport> {
         return Ok(report);
     }
 
-    let contents = fs::read_to_string(&skill_md_path)
-        .with_context(|| format!("failed to read {}", skill_md_path.display()))?;
-
-    let frontmatter = match parse_frontmatter(&contents) {
+    let frontmatter = match read_frontmatter(path) {
         Ok(frontmatter) => frontmatter,
         Err(err) => {
             report.issues.push(ValidationIssue {
                 severity: Severity::Error,
-                message: err,
+                message: err.to_string(),
                 path: Some(skill_md_path),
             });
             return Ok(report);
@@ -138,6 +135,13 @@ pub fn validate_skill_dir(path: &Path) -> Result<ValidationReport> {
     Ok(report)
 }
 
+pub fn read_frontmatter(path: &Path) -> Result<SkillFrontmatter> {
+    let skill_md_path = path.join("SKILL.md");
+    let contents = fs::read_to_string(&skill_md_path)
+        .with_context(|| format!("failed to read {}", skill_md_path.display()))?;
+    parse_frontmatter(&contents).map_err(|err| anyhow!("invalid frontmatter: {err}"))
+}
+
 fn parse_frontmatter(contents: &str) -> Result<SkillFrontmatter, String> {
     let mut lines = contents.lines();
     let first = lines.next().unwrap_or("").trim();
@@ -158,7 +162,7 @@ fn parse_frontmatter(contents: &str) -> Result<SkillFrontmatter, String> {
     }
 
     let yaml = yaml_lines.join("\n");
-    serde_yaml::from_str(&yaml).map_err(|err| format!("invalid frontmatter: {err}"))
+    serde_yaml::from_str(&yaml).map_err(|err| format!("{err}"))
 }
 
 fn validate_name(name: &str, path: &Path, report: &mut ValidationReport) {

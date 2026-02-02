@@ -67,6 +67,8 @@ pub struct RemoveCommand {
     #[command(flatten)]
     pub assistant: AssistantArgs,
     pub name: String,
+    #[arg(long, help = "Skip confirmation prompts")]
+    pub yes: bool,
 }
 
 #[derive(Args, Debug)]

@@ -1,5 +1,6 @@
 mod assistant;
 mod cli;
+mod commands;
 mod config;
 mod paths;
 mod scan;
@@ -52,10 +53,10 @@ fn main() -> Result<()> {
             println!("Default assistant set to {}", cmd.assistant);
             Ok(())
         }
-        Command::Add(_) => Err(anyhow!("add is not implemented yet")),
-        Command::Remove(_) => Err(anyhow!("remove is not implemented yet")),
-        Command::List(_) => Err(anyhow!("list is not implemented yet")),
-        Command::Show(_) => Err(anyhow!("show is not implemented yet")),
+        Command::Add(cmd) => commands::cmd_add(&cmd, &config, &paths),
+        Command::Remove(cmd) => commands::cmd_remove(&cmd, &config, &paths),
+        Command::List(cmd) => commands::cmd_list(&cmd, &config, &paths),
+        Command::Show(cmd) => commands::cmd_show(&cmd, &config, &paths),
         Command::Stats(_) => Err(anyhow!("stats is not implemented yet")),
         Command::Search(_) => Err(anyhow!("search is not implemented yet")),
         Command::Scan(cmd) => {
