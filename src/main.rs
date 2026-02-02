@@ -2,6 +2,7 @@ mod assistant;
 mod cli;
 mod config;
 mod paths;
+mod scan;
 mod validation;
 
 use anyhow::{anyhow, Result};
@@ -57,7 +58,27 @@ fn main() -> Result<()> {
         Command::Show(_) => Err(anyhow!("show is not implemented yet")),
         Command::Stats(_) => Err(anyhow!("stats is not implemented yet")),
         Command::Search(_) => Err(anyhow!("search is not implemented yet")),
-        Command::Scan(_) => Err(anyhow!("scan is not implemented yet")),
+        Command::Scan(cmd) => {
+            let report = scan::scan_path(Path::new(&cmd.path))?;
+            if report.issues.is_empty() && report.external.is_empty() {
+                println!("Scan passed");
+                return Ok(());
+            }
+
+            for issue in &report.issues {
+                println!("{issue}");
+            }
+
+            for external in &report.external {
+                println!("[{}] {}", external.tool, external.output);
+            }
+
+            if report.has_errors() {
+                Err(anyhow!("scan found errors"))
+            } else {
+                Ok(())
+            }
+        }
         Command::Validate(cmd) => {
             let report = validation::validate_skill_dir(Path::new(&cmd.path))?;
             if report.issues.is_empty() {
