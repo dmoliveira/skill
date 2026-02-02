@@ -175,7 +175,9 @@ pub fn scan_path(path: &Path) -> Result<ScanReport> {
         }
     }
 
-    report.external.extend(run_external_scans(path)?);
+    if std::env::var("SKILL_SKIP_EXTERNAL_SCANS").is_err() {
+        report.external.extend(run_external_scans(path)?);
+    }
     Ok(report)
 }
 
