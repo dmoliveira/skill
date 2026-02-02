@@ -1,4 +1,3 @@
-use crate::assistant::Assistant;
 use anyhow::{anyhow, Result};
 use std::path::{Path, PathBuf};
 
@@ -24,10 +23,6 @@ impl AppPaths {
             config_file,
             skills_base_dir,
         })
-    }
-
-    pub fn skills_root(&self, assistant: Assistant) -> PathBuf {
-        self.skills_base_dir.join(assistant.as_str())
     }
 }
 

@@ -1,10 +1,14 @@
+use serde::{Deserialize, Serialize};
 use std::fmt;
 use std::str::FromStr;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Assistant {
+    #[serde(rename = "codex")]
     Codex,
+    #[serde(rename = "claudecode", alias = "claude-code", alias = "claude_code")]
     ClaudeCode,
+    #[serde(rename = "opencode", alias = "open-code", alias = "open_code")]
     OpenCode,
 }
 
