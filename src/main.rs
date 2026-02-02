@@ -2,12 +2,14 @@ mod assistant;
 mod cli;
 mod config;
 mod paths;
+mod validation;
 
 use anyhow::{anyhow, Result};
 use clap::Parser;
 use cli::{Cli, Command};
 use config::Config;
 use paths::AppPaths;
+use std::path::Path;
 
 fn main() -> Result<()> {
     let cli = Cli::parse();
@@ -56,7 +58,23 @@ fn main() -> Result<()> {
         Command::Stats(_) => Err(anyhow!("stats is not implemented yet")),
         Command::Search(_) => Err(anyhow!("search is not implemented yet")),
         Command::Scan(_) => Err(anyhow!("scan is not implemented yet")),
-        Command::Validate(_) => Err(anyhow!("validate is not implemented yet")),
+        Command::Validate(cmd) => {
+            let report = validation::validate_skill_dir(Path::new(&cmd.path))?;
+            if report.issues.is_empty() {
+                println!("Validation passed");
+                return Ok(());
+            }
+
+            for issue in &report.issues {
+                println!("{issue}");
+            }
+
+            if report.has_errors() {
+                Err(anyhow!("validation failed"))
+            } else {
+                Ok(())
+            }
+        }
         Command::MarkUsed(_) => Err(anyhow!("mark-used is not implemented yet")),
     }
 }
