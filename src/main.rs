@@ -4,6 +4,7 @@ mod commands;
 mod config;
 mod paths;
 mod scan;
+mod usage;
 mod validation;
 
 use anyhow::{anyhow, Result};
@@ -26,6 +27,8 @@ fn main() -> Result<()> {
                 .unwrap_or(&paths.skills_base_dir);
             println!("Config dir: {}", paths.config_dir.display());
             println!("Config file: {}", paths.config_file.display());
+            println!("Data dir: {}", paths.data_dir.display());
+            println!("Usage file: {}", paths.usage_file.display());
             println!("Skills base dir: {}", base_dir.display());
 
             if let Some(assistant) = cmd.assistant.selected() {
@@ -57,7 +60,7 @@ fn main() -> Result<()> {
         Command::Remove(cmd) => commands::cmd_remove(&cmd, &config, &paths),
         Command::List(cmd) => commands::cmd_list(&cmd, &config, &paths),
         Command::Show(cmd) => commands::cmd_show(&cmd, &config, &paths),
-        Command::Stats(_) => Err(anyhow!("stats is not implemented yet")),
+        Command::Stats(cmd) => commands::cmd_stats(&cmd, &config, &paths),
         Command::Search(_) => Err(anyhow!("search is not implemented yet")),
         Command::Scan(cmd) => {
             let report = scan::scan_path(Path::new(&cmd.path))?;
@@ -97,6 +100,6 @@ fn main() -> Result<()> {
                 Ok(())
             }
         }
-        Command::MarkUsed(_) => Err(anyhow!("mark-used is not implemented yet")),
+        Command::MarkUsed(cmd) => commands::cmd_mark_used(&cmd, &config, &paths),
     }
 }

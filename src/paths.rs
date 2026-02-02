@@ -4,23 +4,31 @@ use std::path::{Path, PathBuf};
 const APP_DIR_NAME: &str = "skillslash";
 const SKILLS_DIR_NAME: &str = "AgentSkills";
 const CONFIG_FILE_NAME: &str = "config.toml";
+const DATA_DIR_NAME: &str = "skillslash";
+const USAGE_FILE_NAME: &str = "usage.json";
 
 #[derive(Debug, Clone)]
 pub struct AppPaths {
     pub config_dir: PathBuf,
     pub config_file: PathBuf,
+    pub data_dir: PathBuf,
+    pub usage_file: PathBuf,
     pub skills_base_dir: PathBuf,
 }
 
 impl AppPaths {
     pub fn new() -> Result<Self> {
         let config_dir = default_config_dir()?;
+        let data_dir = default_data_dir()?;
         let skills_base_dir = default_skills_base_dir()?;
         let config_file = config_dir.join(CONFIG_FILE_NAME);
+        let usage_file = data_dir.join(USAGE_FILE_NAME);
 
         Ok(Self {
             config_dir,
             config_file,
+            data_dir,
+            usage_file,
             skills_base_dir,
         })
     }
@@ -39,6 +47,11 @@ pub fn default_skills_base_dir() -> Result<PathBuf> {
 
     let data_base = dirs::data_dir().ok_or_else(|| anyhow!("missing data directory"))?;
     Ok(data_base.join(SKILLS_DIR_NAME))
+}
+
+pub fn default_data_dir() -> Result<PathBuf> {
+    let data_base = dirs::data_dir().ok_or_else(|| anyhow!("missing data directory"))?;
+    Ok(data_base.join(DATA_DIR_NAME))
 }
 
 pub fn ensure_dir(path: &Path) -> Result<()> {

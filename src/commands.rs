@@ -1,9 +1,14 @@
 use crate::assistant::Assistant;
-use crate::cli::{AddCommand, AssistantArgs, ListCommand, RemoveCommand, ShowCommand};
+use crate::cli::{
+    AddCommand, AssistantArgs, ListCommand, MarkUsedCommand, RemoveCommand, ShowCommand,
+    StatsCommand,
+};
 use crate::config::Config;
 use crate::paths::{ensure_dir, AppPaths};
+use crate::usage::UsageStore;
 use crate::{scan, validation};
 use anyhow::{anyhow, Context, Result};
+use bytesize::ByteSize;
 use std::fs;
 use std::io::{self, Write};
 use std::path::{Path, PathBuf};
@@ -160,6 +165,77 @@ pub fn cmd_show(cmd: &ShowCommand, config: &Config, paths: &AppPaths) -> Result<
     Ok(())
 }
 
+pub fn cmd_stats(cmd: &StatsCommand, config: &Config, paths: &AppPaths) -> Result<()> {
+    let assistants = resolve_stats_assistants(&cmd.assistant, config);
+    let usage = UsageStore::load(paths)?;
+    let mut total_bytes = 0u64;
+    let mut total_skills = 0u64;
+
+    for assistant in &assistants {
+        let root = config.skills_root_for(paths, *assistant);
+        let mut skills = Vec::new();
+        let mut assistant_bytes = 0u64;
+
+        if root.exists() {
+            for entry in
+                fs::read_dir(&root).with_context(|| format!("failed to read {}", root.display()))?
+            {
+                let entry = entry?;
+                if entry.file_type()?.is_dir() {
+                    let skill_dir = entry.path();
+                    if skill_dir.join("SKILL.md").exists() {
+                        if let Some(name) = skill_dir.file_name().and_then(|n| n.to_str()) {
+                            let size = skill_size(&skill_dir)?;
+                            assistant_bytes += size;
+                            skills.push((name.to_string(), size));
+                        }
+                    }
+                }
+            }
+        }
+
+        skills.sort_by(|a, b| a.0.cmp(&b.0));
+        total_bytes += assistant_bytes;
+        total_skills += skills.len() as u64;
+
+        println!("{assistant}:");
+        println!("Skills: {}", skills.len());
+        println!("Size: {}", ByteSize(assistant_bytes));
+
+        let usage_total: u64 = skills
+            .iter()
+            .map(|(name, _)| usage.count_for(*assistant, name))
+            .sum();
+        if usage_total > 0 {
+            println!("Usage: {}", usage_total);
+            for (name, _) in &skills {
+                let count = usage.count_for(*assistant, name);
+                if count > 0 {
+                    println!("  {name}: {count}");
+                }
+            }
+        }
+
+        println!();
+    }
+
+    if assistants.len() > 1 {
+        println!("Total skills: {}", total_skills);
+        println!("Total size: {}", ByteSize(total_bytes));
+    }
+
+    Ok(())
+}
+
+pub fn cmd_mark_used(cmd: &MarkUsedCommand, config: &Config, paths: &AppPaths) -> Result<()> {
+    let assistant = resolve_single_assistant(&cmd.assistant, config, "mark-used")?;
+    let mut store = UsageStore::load(paths)?;
+    store.increment(assistant, &cmd.name);
+    store.save(paths)?;
+    println!("Marked {} used for {}", cmd.name, assistant);
+    Ok(())
+}
+
 fn resolve_single_assistant(
     args: &AssistantArgs,
     config: &Config,
@@ -194,6 +270,22 @@ fn resolve_list_assistants(args: &AssistantArgs, config: &Config) -> Vec<Assista
     }
 
     eprintln!("Warning: no default assistant set. Listing skills for all assistants.");
+    vec![Assistant::Codex, Assistant::ClaudeCode, Assistant::OpenCode]
+}
+
+fn resolve_stats_assistants(args: &AssistantArgs, config: &Config) -> Vec<Assistant> {
+    if let Some(selected) = args.selected() {
+        return vec![selected];
+    }
+
+    if let Some(default) = config.default_assistant {
+        eprintln!(
+            "Warning: using default assistant {default} for stats. Use --codex/--claudecode/--opencode to override."
+        );
+        return vec![default];
+    }
+
+    eprintln!("Warning: no default assistant set. Showing stats for all assistants.");
     vec![Assistant::Codex, Assistant::ClaudeCode, Assistant::OpenCode]
 }
 
@@ -276,6 +368,22 @@ fn copy_dir_filtered(src: &Path, dest: &Path) -> Result<()> {
         }
     }
     Ok(())
+}
+
+fn skill_size(path: &Path) -> Result<u64> {
+    let mut total = 0u64;
+    for entry in WalkDir::new(path).follow_links(false) {
+        let entry = entry?;
+        let rel_path = entry.path().strip_prefix(path)?;
+        if should_skip(rel_path) {
+            continue;
+        }
+
+        if entry.file_type().is_file() {
+            total += entry.metadata()?.len();
+        }
+    }
+    Ok(total)
 }
 
 fn should_skip(rel_path: &Path) -> bool {
