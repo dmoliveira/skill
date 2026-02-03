@@ -3,6 +3,17 @@
 
 SkillSlash (`skill`) is a cross-platform CLI for managing Agent Skills for Codex, Claude Code, and OpenCode.
 
+## Installation
+
+Homebrew (macOS):
+
+```bash
+brew tap dmoliveira/skill
+brew install skill
+```
+
+Maintainers: update `packaging/homebrew/skill.rb` with release version + sha256.
+
 ## Quick start
 
 ```bash
