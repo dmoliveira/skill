@@ -34,7 +34,7 @@ impl Config {
         let contents = fs::read_to_string(&paths.config_file).with_context(|| {
             format!("failed to read config file {}", paths.config_file.display())
         })?;
-        let config = toml::from_str(&contents).with_context(|| {
+        let config = serde_yaml::from_str(&contents).with_context(|| {
             format!(
                 "failed to parse config file {}",
                 paths.config_file.display()
@@ -45,7 +45,7 @@ impl Config {
 
     pub fn save(&self, paths: &AppPaths) -> Result<()> {
         ensure_dir(&paths.config_dir)?;
-        let contents = toml::to_string_pretty(self)?;
+        let contents = serde_yaml::to_string(self)?;
         fs::write(&paths.config_file, contents).with_context(|| {
             format!(
                 "failed to write config file {}",

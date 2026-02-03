@@ -1,9 +1,9 @@
 use anyhow::{anyhow, Result};
 use std::path::{Path, PathBuf};
 
-const APP_DIR_NAME: &str = "skillslash";
+const SKILLS_HOME_DIR_NAME: &str = ".skills";
 const SKILLS_DIR_NAME: &str = "AgentSkills";
-const CONFIG_FILE_NAME: &str = "config.toml";
+const CONFIG_FILE_NAME: &str = "config.yaml";
 const DATA_DIR_NAME: &str = "skillslash";
 const USAGE_FILE_NAME: &str = "usage.json";
 
@@ -35,8 +35,8 @@ impl AppPaths {
 }
 
 pub fn default_config_dir() -> Result<PathBuf> {
-    let config_base = dirs::config_dir().ok_or_else(|| anyhow!("missing config directory"))?;
-    Ok(config_base.join(APP_DIR_NAME))
+    let home_dir = dirs::home_dir().ok_or_else(|| anyhow!("missing home directory"))?;
+    Ok(home_dir.join(SKILLS_HOME_DIR_NAME))
 }
 
 pub fn default_skills_base_dir() -> Result<PathBuf> {
