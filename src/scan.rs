@@ -250,5 +250,41 @@ fn run_external_scans(path: &Path) -> Result<Vec<ExternalScan>> {
         });
     }
 
+    if which::which("yara").is_ok() {
+        if let Ok(rules) = std::env::var("SKILL_YARA_RULES") {
+            let output = Command::new("yara")
+                .arg("-r")
+                .arg(&rules)
+                .arg(path)
+                .output()
+                .with_context(|| "failed to run yara")?;
+
+            let stdout = String::from_utf8_lossy(&output.stdout).to_string();
+            let stderr = String::from_utf8_lossy(&output.stderr).to_string();
+            let combined = format!("{}{}", stdout, stderr).trim().to_string();
+            let exit_code = output.status.code().unwrap_or(-1);
+            let severity = match exit_code {
+                0 => Severity::Info,
+                1 => Severity::Error,
+                _ => Severity::Warning,
+            };
+            let output_message = if combined.is_empty() {
+                match exit_code {
+                    0 => "yara found no matches".to_string(),
+                    1 => "yara detected matches".to_string(),
+                    _ => "yara failed to scan".to_string(),
+                }
+            } else {
+                combined
+            };
+
+            scans.push(ExternalScan {
+                tool: "yara".to_string(),
+                severity,
+                output: output_message,
+            });
+        }
+    }
+
     Ok(scans)
 }
