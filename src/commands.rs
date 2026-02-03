@@ -9,12 +9,16 @@ use crate::usage::UsageStore;
 use crate::{scan, validation};
 use anyhow::{anyhow, Context, Result};
 use bytesize::ByteSize;
+use flate2::read::GzDecoder;
 use std::fs;
+use std::fs::File;
 use std::io::{self, Write};
 use std::path::{Path, PathBuf};
 use std::process::Command;
+use tar::Archive;
 use tempfile::TempDir;
 use walkdir::WalkDir;
+use zip::ZipArchive;
 
 pub fn cmd_add(cmd: &AddCommand, config: &Config, paths: &AppPaths) -> Result<()> {
     let assistant = resolve_single_assistant(&cmd.assistant, config, "add")?;
@@ -370,6 +374,14 @@ fn prepare_source(source: &str) -> Result<(PathBuf, Option<TempDir>)> {
         return Ok((source_path, None));
     }
 
+    if looks_like_http_url(source) {
+        let archive_type = detect_archive_type(source).ok_or_else(|| {
+            anyhow!("unsupported HTTP source. Use a .zip, .tar, .tar.gz, or .tgz URL.")
+        })?;
+        let (path, temp_dir) = download_and_extract(source, archive_type)?;
+        return Ok((path, Some(temp_dir)));
+    }
+
     if looks_like_git_source(source) {
         let temp_dir = tempfile::tempdir().context("failed to create temp dir")?;
         let status = Command::new("git")
@@ -396,6 +408,96 @@ fn looks_like_git_source(source: &str) -> bool {
         || source.starts_with("https://")
         || source.starts_with("git@")
         || source.ends_with(".git")
+}
+
+fn looks_like_http_url(source: &str) -> bool {
+    source.starts_with("http://") || source.starts_with("https://")
+}
+
+#[derive(Debug, Clone, Copy)]
+enum ArchiveType {
+    Zip,
+    Tar,
+    TarGz,
+}
+
+fn detect_archive_type(source: &str) -> Option<ArchiveType> {
+    let lower = source.to_ascii_lowercase();
+    if lower.ends_with(".zip") {
+        Some(ArchiveType::Zip)
+    } else if lower.ends_with(".tar.gz") || lower.ends_with(".tgz") {
+        Some(ArchiveType::TarGz)
+    } else if lower.ends_with(".tar") {
+        Some(ArchiveType::Tar)
+    } else {
+        None
+    }
+}
+
+fn download_and_extract(url: &str, archive_type: ArchiveType) -> Result<(PathBuf, TempDir)> {
+    let temp_dir = tempfile::tempdir().context("failed to create temp dir")?;
+    let archive_name = match archive_type {
+        ArchiveType::Zip => "skill.zip",
+        ArchiveType::Tar => "skill.tar",
+        ArchiveType::TarGz => "skill.tar.gz",
+    };
+    let archive_path = temp_dir.path().join(archive_name);
+    let response = ureq::get(url)
+        .call()
+        .map_err(|err| anyhow!("failed to download {url}: {err}"))?;
+    let mut reader = response.into_reader();
+    let mut file = File::create(&archive_path)
+        .with_context(|| format!("failed to create {}", archive_path.display()))?;
+    std::io::copy(&mut reader, &mut file).with_context(|| {
+        format!(
+            "failed to write downloaded archive {}",
+            archive_path.display()
+        )
+    })?;
+
+    let extract_dir = temp_dir.path().join("extracted");
+    fs::create_dir_all(&extract_dir)
+        .with_context(|| format!("failed to create {}", extract_dir.display()))?;
+
+    match archive_type {
+        ArchiveType::Zip => extract_zip(&archive_path, &extract_dir)?,
+        ArchiveType::Tar => extract_tar(&archive_path, &extract_dir)?,
+        ArchiveType::TarGz => extract_tar_gz(&archive_path, &extract_dir)?,
+    }
+
+    Ok((extract_dir, temp_dir))
+}
+
+fn extract_zip(archive_path: &Path, dest: &Path) -> Result<()> {
+    let file = File::open(archive_path)
+        .with_context(|| format!("failed to open {}", archive_path.display()))?;
+    let mut archive = ZipArchive::new(file)
+        .with_context(|| format!("failed to read {}", archive_path.display()))?;
+    archive
+        .extract(dest)
+        .with_context(|| format!("failed to extract {}", archive_path.display()))?;
+    Ok(())
+}
+
+fn extract_tar(archive_path: &Path, dest: &Path) -> Result<()> {
+    let file = File::open(archive_path)
+        .with_context(|| format!("failed to open {}", archive_path.display()))?;
+    let mut archive = Archive::new(file);
+    archive
+        .unpack(dest)
+        .with_context(|| format!("failed to extract {}", archive_path.display()))?;
+    Ok(())
+}
+
+fn extract_tar_gz(archive_path: &Path, dest: &Path) -> Result<()> {
+    let file = File::open(archive_path)
+        .with_context(|| format!("failed to open {}", archive_path.display()))?;
+    let decoder = GzDecoder::new(file);
+    let mut archive = Archive::new(decoder);
+    archive
+        .unpack(dest)
+        .with_context(|| format!("failed to extract {}", archive_path.display()))?;
+    Ok(())
 }
 
 fn confirm(prompt: &str) -> Result<bool> {
