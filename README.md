@@ -42,11 +42,16 @@ SkillSlash validates and scans skills before install and will prompt for confirm
 
 Run `skill paths` to see the exact directories in use. Defaults:
 
-- macOS: `~/Library/Application Support/AgentSkills/<assistant>`
-- Linux: `~/.config/AgentSkills/<assistant>`
-- Windows: `%APPDATA%\AgentSkills\<assistant>`
+- macOS/Linux: `~/.skills/data/<assistant>`
+- Windows: `%USERPROFILE%\.skills\data\<assistant>`
 
-Config file location is platform-specific and shown by `skill paths`.
+Config file:
+
+- macOS/Linux: `~/.skills/config.yaml`
+- Windows: `%USERPROFILE%\.skills\config.yaml`
+
+Config file location is shown by `skill paths`. A default config is bootstrapped
+from `config.example.yaml` on first run.
 
 ## Development
 

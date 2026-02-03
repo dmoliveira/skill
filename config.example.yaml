@@ -1,0 +1,12 @@
+# SkillSlash configuration
+# Set default_assistant to codex, claudecode, or opencode.
+default_assistant: null
+
+# Override base directory for skills data.
+skills_base_dir: null
+
+# Optional per-assistant overrides.
+skills_roots:
+  codex: null
+  claudecode: null
+  opencode: null

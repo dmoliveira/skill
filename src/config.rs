@@ -5,6 +5,8 @@ use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::PathBuf;
 
+const CONFIG_EXAMPLE: &str = include_str!("../config.example.yaml");
+
 #[derive(Debug, Default, Serialize, Deserialize)]
 pub struct Config {
     #[serde(default)]
@@ -28,7 +30,10 @@ pub struct SkillsRoots {
 impl Config {
     pub fn load(paths: &AppPaths) -> Result<Self> {
         if !paths.config_file.exists() {
-            return Ok(Self::default());
+            if let Err(err) = bootstrap_config(paths) {
+                eprintln!("Warning: failed to write default config: {err}");
+                return Ok(Self::default());
+            }
         }
 
         let contents = fs::read_to_string(&paths.config_file).with_context(|| {
@@ -72,4 +77,18 @@ impl Config {
             .unwrap_or(&paths.skills_base_dir);
         base_dir.join(assistant.as_str())
     }
+}
+
+fn bootstrap_config(paths: &AppPaths) -> Result<()> {
+    ensure_dir(&paths.config_dir)?;
+    if paths.config_file.exists() {
+        return Ok(());
+    }
+    fs::write(&paths.config_file, CONFIG_EXAMPLE).with_context(|| {
+        format!(
+            "failed to write config file {}",
+            paths.config_file.display()
+        )
+    })?;
+    Ok(())
 }
