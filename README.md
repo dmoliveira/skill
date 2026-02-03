@@ -14,6 +14,35 @@ brew install skill
 
 Maintainers: update `packaging/homebrew/skill.rb` with release version + sha256.
 
+Linux (tarball):
+
+```bash
+curl -fsSL https://github.com/dmoliveira/skill/releases/latest/download/skill-x86_64-unknown-linux-gnu.tar.gz \
+  | tar -xz
+sudo install skill /usr/local/bin/skill
+```
+
+Linux (install script):
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/dmoliveira/skill/main/packaging/linux/install.sh \
+  | bash
+```
+
+Windows (winget):
+
+```powershell
+winget install dmoliveira.skill
+```
+
+Windows (zip):
+
+```powershell
+irm https://github.com/dmoliveira/skill/releases/latest/download/skill-x86_64-pc-windows-msvc.zip -OutFile skill.zip
+Expand-Archive skill.zip -DestinationPath $env:ProgramFiles\skill
+$env:Path += ";$env:ProgramFiles\skill"
+```
+
 ## Quick start
 
 ```bash
