@@ -415,6 +415,9 @@ fn resolve_skill_path(root: &Path, skill: &str) -> Result<PathBuf> {
     if !skill_path.starts_with("skills") {
         candidates.push(root.join("skills").join(skill_path));
     }
+    if !skill_path.starts_with("skill") {
+        candidates.push(root.join("skill").join(skill_path));
+    }
 
     for candidate in candidates {
         if candidate.is_dir() && candidate.join("SKILL.md").exists() {
@@ -423,7 +426,7 @@ fn resolve_skill_path(root: &Path, skill: &str) -> Result<PathBuf> {
     }
 
     Err(anyhow!(
-        "skill '{skill}' not found. Expected SKILL.md in <repo>/{skill} or <repo>/skills/{skill}"
+        "skill '{skill}' not found. Expected SKILL.md in <repo>/{skill}, <repo>/skills/{skill}, or <repo>/skill/{skill}"
     ))
 }
 
@@ -878,6 +881,17 @@ mod tests {
         let temp = tempdir().expect("temp dir");
         let skills_dir = temp.path().join("skills");
         fs::create_dir_all(&skills_dir).expect("create skills dir");
+        let nested = write_skill(&skills_dir, "nested-skill");
+
+        let resolved = resolve_skill_path(temp.path(), "nested-skill").expect("resolve skill");
+        assert_eq!(resolved, nested);
+    }
+
+    #[test]
+    fn resolve_skill_path_falls_back_to_skill_dir() {
+        let temp = tempdir().expect("temp dir");
+        let skills_dir = temp.path().join("skill");
+        fs::create_dir_all(&skills_dir).expect("create skill dir");
         let nested = write_skill(&skills_dir, "nested-skill");
 
         let resolved = resolve_skill_path(temp.path(), "nested-skill").expect("resolve skill");

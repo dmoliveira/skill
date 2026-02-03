@@ -63,7 +63,7 @@ SkillSlash validates and scans skills before install and will prompt for confirm
 
 ## Commands
 
-- `skill add <path|git-url|archive-url> [--codex|--claudecode|--opencode] [--skill <name>] [--yes]`: validate/scan and install a skill from a local dir, git repo, or archive URL; `--skill` selects a skill subdirectory inside a repo (supports `skills/<name>`). `--yes` skips confirmation. Archive URLs must end with `.zip`, `.tar`, `.tar.gz`, or `.tgz`.
+- `skill add <path|git-url|archive-url> [--codex|--claudecode|--opencode] [--skill <name>] [--yes]`: validate/scan and install a skill from a local dir, git repo, or archive URL; `--skill` selects a skill subdirectory inside a repo (supports `skills/<name>` or `skill/<name>`). `--yes` skips confirmation. Archive URLs must end with `.zip`, `.tar`, `.tar.gz`, or `.tgz`.
 - `skill remove <name> [--codex|--claudecode|--opencode] [--yes]`: uninstall a skill by name; `--yes` skips confirmation.
 - `skill list [--codex|--claudecode|--opencode]`: list installed skills for one assistant (or default).
 - `skill show <name> [--codex|--claudecode|--opencode]`: show metadata and path for a skill.
