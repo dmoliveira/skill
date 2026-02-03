@@ -22,7 +22,11 @@ use zip::ZipArchive;
 
 pub fn cmd_add(cmd: &AddCommand, config: &Config, paths: &AppPaths) -> Result<()> {
     let assistant = resolve_single_assistant(&cmd.assistant, config, "add")?;
-    let (skill_dir, temp_dir) = prepare_source(&cmd.source)?;
+    let (source_dir, temp_dir) = prepare_source(&cmd.source)?;
+    let skill_dir = match cmd.skill.as_deref() {
+        Some(skill) => resolve_skill_path(&source_dir, skill)?,
+        None => source_dir,
+    };
 
     let validation_report = validation::validate_skill_dir(&skill_dir)?;
     if !validation_report.issues.is_empty() {
@@ -392,6 +396,35 @@ fn prepare_source(source: &str) -> Result<(PathBuf, Option<TempDir>)> {
     }
 
     Err(anyhow!("source not found: {source}"))
+}
+
+fn resolve_skill_path(root: &Path, skill: &str) -> Result<PathBuf> {
+    let skill_path = Path::new(skill);
+    if skill_path.is_absolute() {
+        return Err(anyhow!("--skill must be a relative path"));
+    }
+    if skill_path
+        .components()
+        .any(|component| matches!(component, std::path::Component::ParentDir))
+    {
+        return Err(anyhow!("--skill must not contain '..'"));
+    }
+
+    let mut candidates = Vec::new();
+    candidates.push(root.join(skill_path));
+    if !skill_path.starts_with("skills") {
+        candidates.push(root.join("skills").join(skill_path));
+    }
+
+    for candidate in candidates {
+        if candidate.is_dir() && candidate.join("SKILL.md").exists() {
+            return Ok(candidate);
+        }
+    }
+
+    Err(anyhow!(
+        "skill '{skill}' not found. Expected SKILL.md in <repo>/{skill} or <repo>/skills/{skill}"
+    ))
 }
 
 fn clone_git_source(source: &str) -> Result<(PathBuf, TempDir)> {
@@ -828,6 +861,34 @@ mod tests {
         let temp = tempdir().expect("temp dir");
 
         let result = resolve_skill_root(temp.path());
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn resolve_skill_path_uses_direct_match() {
+        let temp = tempdir().expect("temp dir");
+        let direct = write_skill(temp.path(), "direct-skill");
+
+        let resolved = resolve_skill_path(temp.path(), "direct-skill").expect("resolve skill");
+        assert_eq!(resolved, direct);
+    }
+
+    #[test]
+    fn resolve_skill_path_falls_back_to_skills_dir() {
+        let temp = tempdir().expect("temp dir");
+        let skills_dir = temp.path().join("skills");
+        fs::create_dir_all(&skills_dir).expect("create skills dir");
+        let nested = write_skill(&skills_dir, "nested-skill");
+
+        let resolved = resolve_skill_path(temp.path(), "nested-skill").expect("resolve skill");
+        assert_eq!(resolved, nested);
+    }
+
+    #[test]
+    fn resolve_skill_path_rejects_parent_dirs() {
+        let temp = tempdir().expect("temp dir");
+
+        let result = resolve_skill_path(temp.path(), "../escape");
         assert!(result.is_err());
     }
 }

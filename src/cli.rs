@@ -58,6 +58,12 @@ pub struct AddCommand {
     #[command(flatten)]
     pub assistant: AssistantArgs,
     pub source: String,
+    #[arg(
+        long,
+        value_name = "NAME",
+        help = "Select a skill directory inside a repo or archive"
+    )]
+    pub skill: Option<String>,
     #[arg(long, help = "Skip confirmation prompts")]
     pub yes: bool,
 }
