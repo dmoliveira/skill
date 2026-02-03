@@ -442,10 +442,56 @@ fn clone_git_source(source: &str) -> Result<(PathBuf, TempDir)> {
         .with_context(|| format!("failed to run git clone for {source}"))?;
 
     if !status.success() {
+        if let Some(suggestion) = suggest_github_repo(source) {
+            return Err(anyhow!(
+                "git clone failed for {source}. Did you mean {suggestion}?"
+            ));
+        }
         return Err(anyhow!("git clone failed for {source}"));
     }
 
     Ok((temp_dir.path().to_path_buf(), temp_dir))
+}
+
+fn suggest_github_repo(source: &str) -> Option<String> {
+    let trimmed = source.trim_end_matches('/');
+    let path = trimmed
+        .strip_prefix("https://github.com/")
+        .or_else(|| trimmed.strip_prefix("http://github.com/"))?;
+    let path = path.strip_suffix(".git").unwrap_or(path);
+    let mut parts = path.split('/');
+    let owner = parts.next()?;
+    let repo = parts.next()?;
+    if parts.next().is_some() {
+        return None;
+    }
+    if repo.ends_with('s') {
+        return None;
+    }
+
+    if github_repo_exists(owner, repo) {
+        return None;
+    }
+
+    let candidate = format!("{repo}s");
+    if github_repo_exists(owner, &candidate) {
+        return Some(format!("https://github.com/{owner}/{candidate}"));
+    }
+    None
+}
+
+fn github_repo_exists(owner: &str, repo: &str) -> bool {
+    let url = format!("https://api.github.com/repos/{owner}/{repo}");
+    let response = ureq::get(&url)
+        .set("Accept", "application/vnd.github+json")
+        .set("User-Agent", "skill")
+        .call();
+
+    match response {
+        Ok(resp) => resp.status() == 200,
+        Err(ureq::Error::Status(404, _)) => false,
+        Err(_) => false,
+    }
 }
 
 fn looks_like_git_source(source: &str) -> bool {
