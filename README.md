@@ -76,6 +76,21 @@ SkillSlash validates and scans skills before install and will prompt for confirm
 - `skill paths`: show config and data directories.
 - `skill --help` / `skill <cmd> --help`: show help for commands.
 
+## AI usage tracking
+
+If your AI/agent loads skills automatically, call `skill mark-used` whenever a skill is accessed. This is lightweight and avoids background processes.
+
+Example (agent runs the skill):
+```bash
+skill mark-used web-quality-audit --codex
+```
+
+Example (after resolving skill from repo):
+```bash
+skill add https://github.com/addyosmani/web-quality-skills --skill web-quality-audit --codex
+skill mark-used web-quality-audit --codex
+```
+
 ## Validation and scanning
 
 - Validates `SKILL.md` against the Agent Skills spec.
