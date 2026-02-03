@@ -12,7 +12,7 @@ use bytesize::ByteSize;
 use flate2::read::GzDecoder;
 use std::fs;
 use std::fs::File;
-use std::io::{self, Write};
+use std::io::{self, Read, Write};
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use tar::Archive;
@@ -421,6 +421,10 @@ enum ArchiveType {
     TarGz,
 }
 
+const MAX_DOWNLOAD_BYTES: u64 = 200 * 1024 * 1024;
+const MAX_EXTRACTED_BYTES: u64 = 512 * 1024 * 1024;
+const MAX_ARCHIVE_ENTRIES: usize = 5_000;
+
 fn detect_archive_type(source: &str) -> Option<ArchiveType> {
     let lower = source.to_ascii_lowercase();
     if lower.ends_with(".zip") {
@@ -445,10 +449,20 @@ fn download_and_extract(url: &str, archive_type: ArchiveType) -> Result<(PathBuf
     let response = ureq::get(url)
         .call()
         .map_err(|err| anyhow!("failed to download {url}: {err}"))?;
+    validate_content_type(archive_type, response.header("Content-Type"))?;
+    if let Some(length) = response.header("Content-Length") {
+        if let Ok(size) = length.parse::<u64>() {
+            if size > MAX_DOWNLOAD_BYTES {
+                return Err(anyhow!(
+                    "download too large ({size} bytes). Limit is {MAX_DOWNLOAD_BYTES} bytes."
+                ));
+            }
+        }
+    }
     let mut reader = response.into_reader();
     let mut file = File::create(&archive_path)
         .with_context(|| format!("failed to create {}", archive_path.display()))?;
-    std::io::copy(&mut reader, &mut file).with_context(|| {
+    copy_with_limit(&mut reader, &mut file, MAX_DOWNLOAD_BYTES).with_context(|| {
         format!(
             "failed to write downloaded archive {}",
             archive_path.display()
@@ -473,19 +487,51 @@ fn extract_zip(archive_path: &Path, dest: &Path) -> Result<()> {
         .with_context(|| format!("failed to open {}", archive_path.display()))?;
     let mut archive = ZipArchive::new(file)
         .with_context(|| format!("failed to read {}", archive_path.display()))?;
-    archive
-        .extract(dest)
-        .with_context(|| format!("failed to extract {}", archive_path.display()))?;
+    let entries = archive.len();
+    if entries > MAX_ARCHIVE_ENTRIES {
+        return Err(anyhow!("archive has too many entries ({entries})"));
+    }
+
+    let mut extracted = 0u64;
+    for i in 0..archive.len() {
+        let mut entry = archive
+            .by_index(i)
+            .with_context(|| format!("failed to read entry {i}"))?;
+        let name = entry.name().to_string();
+        let entry_path = Path::new(&name);
+        let safe_path = sanitize_archive_path(entry_path)
+            .with_context(|| format!("unsafe archive path: {name}"))?;
+
+        if is_zip_symlink(&entry) {
+            return Err(anyhow!("archive contains symlink: {name}"));
+        }
+
+        if entry.is_dir() {
+            fs::create_dir_all(dest.join(&safe_path))?;
+            continue;
+        }
+
+        let size = entry.size();
+        extracted = extracted.saturating_add(size);
+        if extracted > MAX_EXTRACTED_BYTES {
+            return Err(anyhow!("extracted data exceeds limit"));
+        }
+
+        let out_path = dest.join(&safe_path);
+        if let Some(parent) = out_path.parent() {
+            fs::create_dir_all(parent)?;
+        }
+        let mut output = File::create(&out_path)
+            .with_context(|| format!("failed to create {}", out_path.display()))?;
+        copy_with_limit(&mut entry, &mut output, MAX_EXTRACTED_BYTES)?;
+    }
     Ok(())
 }
 
 fn extract_tar(archive_path: &Path, dest: &Path) -> Result<()> {
     let file = File::open(archive_path)
         .with_context(|| format!("failed to open {}", archive_path.display()))?;
-    let mut archive = Archive::new(file);
-    archive
-        .unpack(dest)
-        .with_context(|| format!("failed to extract {}", archive_path.display()))?;
+    extract_tar_stream(file, dest)?;
     Ok(())
 }
 
@@ -493,11 +539,117 @@ fn extract_tar_gz(archive_path: &Path, dest: &Path) -> Result<()> {
     let file = File::open(archive_path)
         .with_context(|| format!("failed to open {}", archive_path.display()))?;
     let decoder = GzDecoder::new(file);
-    let mut archive = Archive::new(decoder);
-    archive
-        .unpack(dest)
-        .with_context(|| format!("failed to extract {}", archive_path.display()))?;
+    extract_tar_stream(decoder, dest)?;
     Ok(())
+}
+
+fn extract_tar_stream<R: Read>(reader: R, dest: &Path) -> Result<()> {
+    let mut archive = Archive::new(reader);
+    let mut extracted = 0u64;
+    let mut entries = 0usize;
+
+    for entry in archive.entries()? {
+        let mut entry = entry?;
+        entries += 1;
+        if entries > MAX_ARCHIVE_ENTRIES {
+            return Err(anyhow!("archive has too many entries ({entries})"));
+        }
+
+        let path = entry.path()?.into_owned();
+        let safe_path = sanitize_archive_path(&path)
+            .with_context(|| format!("unsafe archive path: {}", path.display()))?;
+
+        let entry_type = entry.header().entry_type();
+        if entry_type.is_symlink() || entry_type.is_hard_link() {
+            return Err(anyhow!("archive contains link: {}", path.display()));
+        }
+
+        let size = entry.header().size().unwrap_or(0);
+        extracted = extracted.saturating_add(size);
+        if extracted > MAX_EXTRACTED_BYTES {
+            return Err(anyhow!("extracted data exceeds limit"));
+        }
+
+        let out_path = dest.join(&safe_path);
+        if let Some(parent) = out_path.parent() {
+            fs::create_dir_all(parent)?;
+        }
+        entry.unpack(&out_path)?;
+    }
+    Ok(())
+}
+
+fn sanitize_archive_path(path: &Path) -> Result<PathBuf> {
+    let mut safe = PathBuf::new();
+    for component in path.components() {
+        match component {
+            std::path::Component::Normal(part) => safe.push(part),
+            std::path::Component::CurDir => continue,
+            std::path::Component::ParentDir
+            | std::path::Component::RootDir
+            | std::path::Component::Prefix(_) => {
+                return Err(anyhow!("path traversal detected"));
+            }
+        }
+    }
+    Ok(safe)
+}
+
+fn is_zip_symlink(entry: &zip::read::ZipFile<'_>) -> bool {
+    if let Some(mode) = entry.unix_mode() {
+        let file_type = mode & 0o170000;
+        return file_type == 0o120000;
+    }
+    false
+}
+
+fn validate_content_type(archive_type: ArchiveType, content_type: Option<&str>) -> Result<()> {
+    let Some(content_type) = content_type else {
+        return Ok(());
+    };
+    let content_type = content_type.to_ascii_lowercase();
+    let allowed: &[&str] = match archive_type {
+        ArchiveType::Zip => &[
+            "application/zip",
+            "application/octet-stream",
+            "application/x-zip-compressed",
+        ],
+        ArchiveType::Tar => &["application/x-tar", "application/octet-stream"],
+        ArchiveType::TarGz => &[
+            "application/gzip",
+            "application/x-gzip",
+            "application/octet-stream",
+        ],
+    };
+
+    if allowed.iter().any(|item| content_type.starts_with(item)) {
+        return Ok(());
+    }
+
+    Err(anyhow!(
+        "unsupported content-type for archive: {content_type}"
+    ))
+}
+
+fn copy_with_limit<R: Read, W: Write>(
+    reader: &mut R,
+    writer: &mut W,
+    max_bytes: u64,
+) -> Result<u64> {
+    let mut total = 0u64;
+    let mut buffer = [0u8; 8192];
+    loop {
+        let read = reader.read(&mut buffer)?;
+        if read == 0 {
+            break;
+        }
+        total = total.saturating_add(read as u64);
+        if total > max_bytes {
+            return Err(anyhow!("data exceeds limit ({max_bytes} bytes)"));
+        }
+        writer.write_all(&buffer[..read])?;
+    }
+    Ok(total)
 }
 
 fn confirm(prompt: &str) -> Result<bool> {
