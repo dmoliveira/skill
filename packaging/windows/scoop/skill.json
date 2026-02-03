@@ -1,0 +1,13 @@
+{
+  "version": "0.1.0",
+  "description": "Manage Agent Skills for Codex, Claude Code, and OpenCode",
+  "homepage": "https://github.com/dmoliveira/skill",
+  "license": "MIT",
+  "architecture": {
+    "64bit": {
+      "url": "https://github.com/dmoliveira/skill/releases/download/v0.1.0/skill-x86_64-pc-windows-msvc.zip",
+      "hash": "REPLACE_ME"
+    }
+  },
+  "bin": "skill.exe"
+}

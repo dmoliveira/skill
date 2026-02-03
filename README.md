@@ -35,6 +35,8 @@ Windows (winget):
 winget install dmoliveira.skill
 ```
 
+Maintainers: update `packaging/windows/winget/skill.yaml` and `packaging/windows/scoop/skill.json` on release.
+
 Windows (zip):
 
 ```powershell

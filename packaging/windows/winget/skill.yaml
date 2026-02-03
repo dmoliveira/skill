@@ -1,0 +1,15 @@
+# Winget manifest template for SkillSlash
+PackageIdentifier: dmoliveira.skill
+PackageVersion: 0.1.0
+PackageLocale: en-US
+Publisher: dmoliveira
+PackageName: SkillSlash
+License: MIT
+ShortDescription: Manage Agent Skills for Codex, Claude Code, and OpenCode
+InstallerType: zip
+Installers:
+  - Architecture: x64
+    InstallerUrl: https://github.com/dmoliveira/skill/releases/download/v0.1.0/skill-x86_64-pc-windows-msvc.zip
+    InstallerSha256: REPLACE_ME
+ManifestType: singleton
+ManifestVersion: 1.6.0
