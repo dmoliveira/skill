@@ -78,7 +78,7 @@ SkillSlash validates and scans skills before install and will prompt for confirm
 
 - Validates `SKILL.md` against the Agent Skills spec.
 - Scans for secrets, risky commands, and binary artifacts.
-- Optional external scanners: `trivy` and `clamscan` if installed.
+- Optional external scanners: `trivy` and `clamscan` if installed, plus `yara` when `SKILL_YARA_RULES` is set.
 
 ## Paths
 
