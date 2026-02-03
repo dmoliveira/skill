@@ -50,6 +50,7 @@ $env:Path += ";$env:ProgramFiles\skill"
 ```bash
 skill default opencode
 skill add ./my-skill --opencode
+skill add https://github.com/addyosmani/web-quality-skills --skill web-quality-audit --opencode
 skill list --opencode
 skill show my-skill
 skill stats
