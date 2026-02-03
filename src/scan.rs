@@ -226,6 +226,8 @@ fn run_external_scans(path: &Path) -> Result<Vec<ExternalScan>> {
     if which::which("clamscan").is_ok() {
         let output = Command::new("clamscan")
             .arg("-r")
+            .arg("--infected")
+            .arg("--no-summary")
             .arg(path)
             .output()
             .with_context(|| "failed to run clamscan")?;
@@ -233,20 +235,26 @@ fn run_external_scans(path: &Path) -> Result<Vec<ExternalScan>> {
         let stdout = String::from_utf8_lossy(&output.stdout).to_string();
         let stderr = String::from_utf8_lossy(&output.stderr).to_string();
         let combined = format!("{}{}", stdout, stderr).trim().to_string();
-        let severity = if output.status.success() {
-            Severity::Info
+        let exit_code = output.status.code().unwrap_or(-1);
+        let severity = match exit_code {
+            0 => Severity::Info,
+            1 => Severity::Error,
+            _ => Severity::Warning,
+        };
+        let output_message = if combined.is_empty() {
+            match exit_code {
+                0 => "clamscan found no issues".to_string(),
+                1 => "clamscan detected malware".to_string(),
+                _ => "clamscan failed to scan".to_string(),
+            }
         } else {
-            Severity::Warning
+            combined
         };
 
         scans.push(ExternalScan {
             tool: "clamscan".to_string(),
             severity,
-            output: if combined.is_empty() {
-                "clamscan produced no output".to_string()
-            } else {
-                combined
-            },
+            output: output_message,
         });
     }
 

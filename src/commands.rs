@@ -22,7 +22,7 @@ use zip::ZipArchive;
 
 pub fn cmd_add(cmd: &AddCommand, config: &Config, paths: &AppPaths) -> Result<()> {
     let assistant = resolve_single_assistant(&cmd.assistant, config, "add")?;
-    let (skill_dir, _temp_dir) = prepare_source(&cmd.source)?;
+    let (skill_dir, temp_dir) = prepare_source(&cmd.source)?;
 
     let validation_report = validation::validate_skill_dir(&skill_dir)?;
     if !validation_report.issues.is_empty() {
@@ -47,6 +47,9 @@ pub fn cmd_add(cmd: &AddCommand, config: &Config, paths: &AppPaths) -> Result<()
         }
     }
     if scan_report.has_errors() {
+        if temp_dir.is_some() {
+            eprintln!("Downloaded files were removed after scan failure.");
+        }
         return Err(anyhow!("security scan failed"));
     }
 
