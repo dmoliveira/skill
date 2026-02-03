@@ -378,38 +378,44 @@ fn prepare_source(source: &str) -> Result<(PathBuf, Option<TempDir>)> {
     }
 
     if looks_like_http_url(source) {
-        let archive_type = detect_archive_type(source).ok_or_else(|| {
-            anyhow!("unsupported HTTP source. Use a .zip, .tar, .tar.gz, or .tgz URL.")
-        })?;
-        let (path, temp_dir) = download_and_extract(source, archive_type)?;
+        if let Some(archive_type) = detect_archive_type(source) {
+            let (path, temp_dir) = download_and_extract(source, archive_type)?;
+            return Ok((path, Some(temp_dir)));
+        }
+        let (path, temp_dir) = clone_git_source(source)?;
         return Ok((path, Some(temp_dir)));
     }
 
     if looks_like_git_source(source) {
-        let temp_dir = tempfile::tempdir().context("failed to create temp dir")?;
-        let status = Command::new("git")
-            .arg("clone")
-            .arg("--depth")
-            .arg("1")
-            .arg(source)
-            .arg(temp_dir.path())
-            .status()
-            .with_context(|| "failed to run git clone")?;
-
-        if !status.success() {
-            return Err(anyhow!("git clone failed"));
-        }
-
-        return Ok((temp_dir.path().to_path_buf(), Some(temp_dir)));
+        let (path, temp_dir) = clone_git_source(source)?;
+        return Ok((path, Some(temp_dir)));
     }
 
     Err(anyhow!("source not found: {source}"))
 }
 
+fn clone_git_source(source: &str) -> Result<(PathBuf, TempDir)> {
+    let temp_dir = tempfile::tempdir().context("failed to create temp dir")?;
+    let status = Command::new("git")
+        .arg("clone")
+        .arg("--depth")
+        .arg("1")
+        .arg(source)
+        .arg(temp_dir.path())
+        .status()
+        .with_context(|| format!("failed to run git clone for {source}"))?;
+
+    if !status.success() {
+        return Err(anyhow!("git clone failed for {source}"));
+    }
+
+    Ok((temp_dir.path().to_path_buf(), temp_dir))
+}
+
 fn looks_like_git_source(source: &str) -> bool {
-    source.starts_with("http://")
-        || source.starts_with("https://")
-        || source.starts_with("git@")
+    source.starts_with("git@")
+        || source.starts_with("ssh://")
+        || source.starts_with("git://")
         || source.ends_with(".git")
 }
 
@@ -482,7 +488,44 @@ fn download_and_extract(url: &str, archive_type: ArchiveType) -> Result<(PathBuf
         ArchiveType::TarGz => extract_tar_gz(&archive_path, &extract_dir)?,
     }
 
-    Ok((extract_dir, temp_dir))
+    let skill_root = resolve_skill_root(&extract_dir)?;
+    Ok((skill_root, temp_dir))
+}
+
+fn resolve_skill_root(extract_dir: &Path) -> Result<PathBuf> {
+    if extract_dir.join("SKILL.md").exists() {
+        return Ok(extract_dir.to_path_buf());
+    }
+
+    let mut found: Option<PathBuf> = None;
+    for entry in WalkDir::new(extract_dir).follow_links(false) {
+        let entry = entry?;
+        if !entry.file_type().is_file() {
+            continue;
+        }
+        if entry.file_name() != "SKILL.md" {
+            continue;
+        }
+        let rel_path = entry.path().strip_prefix(extract_dir)?;
+        if should_skip(rel_path) {
+            continue;
+        }
+        let Some(parent) = entry.path().parent() else {
+            continue;
+        };
+        let parent = parent.to_path_buf();
+        if let Some(existing) = &found {
+            if existing != &parent {
+                return Err(anyhow!(
+                    "archive contains multiple SKILL.md files; use an archive with a single skill"
+                ));
+            }
+        } else {
+            found = Some(parent);
+        }
+    }
+
+    found.ok_or_else(|| anyhow!("archive did not contain a SKILL.md file"))
 }
 
 fn extract_zip(archive_path: &Path, dest: &Path) -> Result<()> {
@@ -709,4 +752,82 @@ fn should_skip(rel_path: &Path) -> bool {
             Some(".git") | Some("target") | Some(".DS_Store")
         )
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::fs;
+    use tempfile::tempdir;
+
+    fn write_skill(dir: &Path, name: &str) -> PathBuf {
+        let skill_dir = dir.join(name);
+        fs::create_dir_all(&skill_dir).expect("create skill dir");
+        fs::write(
+            skill_dir.join("SKILL.md"),
+            "---\nname: test-skill\ndescription: test\n---\n",
+        )
+        .expect("write skill md");
+        skill_dir
+    }
+
+    #[test]
+    fn detect_archive_type_accepts_supported_extensions() {
+        assert!(matches!(
+            detect_archive_type("https://example.com/skill.zip"),
+            Some(ArchiveType::Zip)
+        ));
+        assert!(matches!(
+            detect_archive_type("https://example.com/skill.tar"),
+            Some(ArchiveType::Tar)
+        ));
+        assert!(matches!(
+            detect_archive_type("https://example.com/skill.tar.gz"),
+            Some(ArchiveType::TarGz)
+        ));
+        assert!(matches!(
+            detect_archive_type("https://example.com/skill.TGZ"),
+            Some(ArchiveType::TarGz)
+        ));
+    }
+
+    #[test]
+    fn resolve_skill_root_uses_root_when_present() {
+        let temp = tempdir().expect("temp dir");
+        fs::write(
+            temp.path().join("SKILL.md"),
+            "---\nname: root-skill\ndescription: test\n---\n",
+        )
+        .expect("write skill md");
+
+        let resolved = resolve_skill_root(temp.path()).expect("resolve root");
+        assert_eq!(resolved, temp.path().to_path_buf());
+    }
+
+    #[test]
+    fn resolve_skill_root_accepts_single_nested_skill() {
+        let temp = tempdir().expect("temp dir");
+        let nested = write_skill(temp.path(), "nested-skill");
+
+        let resolved = resolve_skill_root(temp.path()).expect("resolve root");
+        assert_eq!(resolved, nested);
+    }
+
+    #[test]
+    fn resolve_skill_root_rejects_multiple_skills() {
+        let temp = tempdir().expect("temp dir");
+        write_skill(temp.path(), "skill-one");
+        write_skill(temp.path(), "skill-two");
+
+        let result = resolve_skill_root(temp.path());
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn resolve_skill_root_errors_when_missing() {
+        let temp = tempdir().expect("temp dir");
+
+        let result = resolve_skill_root(temp.path());
+        assert!(result.is_err());
+    }
 }

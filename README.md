@@ -62,17 +62,18 @@ SkillSlash validates and scans skills before install and will prompt for confirm
 
 ## Commands
 
-- `skill add <path|git-url> [--codex|--claudecode|--opencode] [--yes]`
-- `skill remove <name> [--codex|--claudecode|--opencode] [--yes]`
-- `skill list [--codex|--claudecode|--opencode]`
-- `skill show <name> [--codex|--claudecode|--opencode]`
-- `skill default <codex|claudecode|opencode>`
-- `skill stats [--codex|--claudecode|--opencode]`
-- `skill search <query> [--codex|--claudecode|--opencode]`
-- `skill scan <path>`
-- `skill validate <path>`
-- `skill mark-used <name> [--codex|--claudecode|--opencode]`
-- `skill paths`
+- `skill add <path|git-url|archive-url> [--codex|--claudecode|--opencode] [--yes]`: validate/scan and install a skill from a local dir, git repo, or archive URL; `--yes` skips confirmation. Archive URLs must end with `.zip`, `.tar`, `.tar.gz`, or `.tgz`.
+- `skill remove <name> [--codex|--claudecode|--opencode] [--yes]`: uninstall a skill by name; `--yes` skips confirmation.
+- `skill list [--codex|--claudecode|--opencode]`: list installed skills for one assistant (or default).
+- `skill show <name> [--codex|--claudecode|--opencode]`: show metadata and path for a skill.
+- `skill default <codex|claudecode|opencode>`: set the default assistant.
+- `skill stats [--codex|--claudecode|--opencode]`: show counts, size, and usage for an assistant.
+- `skill search <query> [--codex|--claudecode|--opencode]`: search installed skills by metadata and content.
+- `skill scan <path>`: run security scan on a directory.
+- `skill validate <path>`: validate `SKILL.md` and structure.
+- `skill mark-used <name> [--codex|--claudecode|--opencode]`: increment usage counter.
+- `skill paths`: show config and data directories.
+- `skill --help` / `skill <cmd> --help`: show help for commands.
 
 ## Validation and scanning
 
