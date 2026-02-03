@@ -6,7 +6,7 @@
   "architecture": {
     "64bit": {
       "url": "https://github.com/dmoliveira/skill/releases/download/v0.1.0/skill-x86_64-pc-windows-msvc.zip",
-      "hash": "REPLACE_ME"
+      "hash": "a9921dac9837d7b3d2ea145180ba8e06112cda612ee68ffa6e8524756f0c51ed"
     }
   },
   "bin": "skill.exe"
